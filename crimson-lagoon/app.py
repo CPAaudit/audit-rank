@@ -220,7 +220,7 @@ def grade_with_ai_model(question_text, user_ans, answer_data, standard_code, api
     # 2. AI Qualitative Assessment
     ref_text = load_reference_text(standard_code)
     # Limit ref_text length as requested
-    ref_text_short = ref_text[:9999] if ref_text else ""
+    ref_text_short = ref_text[:50000] if ref_text else ""
 
     try:
         genai.configure(api_key=api_key)
@@ -812,5 +812,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
