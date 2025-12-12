@@ -114,3 +114,50 @@ def update_user_role(target_user, new_role):
         supabase.table("users").update({"role": new_role}).eq("username", target_user).execute()
     except:
         pass
+
+# --- 추가된 함수 (My Profile 및 통계용) ---
+def save_quiz_result(username, standard, score):
+    """퀴즈 결과 저장"""
+    try:
+        data = {
+            "username": username,
+            "standard_code": standard,
+            "score": score,
+            "created_at": datetime.now().isoformat()
+        }
+        supabase.table("quiz_history").insert(data).execute()
+    except Exception as e:
+        print(f"Save quiz error: {e}")
+
+def get_user_stats(username):
+    """사용자 통계 (Total XP, 최근 기록)"""
+    stats = {'total_score': 0, 'recent_history': []}
+    try:
+        # 1. Total XP (users 테이블에서)
+        user_res = supabase.table("users").select("exp").eq("username", username).execute()
+        if user_res.data:
+            stats['total_score'] = user_res.data[0]['exp']
+            
+        # 2. 최근 기록 (quiz_history 테이블에서)
+        # 퀴즈 히스토리 테이블이 없으면 에러가 날 수 있으므로 try-except 처리
+        hist_res = supabase.table("quiz_history").select("standard_code, score, created_at").eq("username", username).order("created_at", desc=True).limit(10).execute()
+        
+        if hist_res.data:
+            for item in hist_res.data:
+                # 날짜 포맷팅 (YYYY-MM-DD HH:MM)
+                dt = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+                fmt_date = dt.strftime("%Y-%m-%d %H:%M")
+                stats['recent_history'].append([item['standard_code'], item['score'], fmt_date])
+                
+    except Exception as e:
+        print(f"Stats error: {e}")
+        
+    return stats
+
+def get_user_history_df(username):
+    """전체 학습 이력 (그래프용)"""
+    try:
+        res = supabase.table("quiz_history").select("*").eq("username", username).execute()
+        return pd.DataFrame(res.data)
+    except Exception:
+        return pd.DataFrame()
