@@ -313,13 +313,44 @@ def draw_skill_chart(stats):
 
 # --- 화면 렌더링 함수 ---
 
-def render_curriculum():
+def render_curriculum(db_data):
     st.title("📚 학습 커리큘럼")
     hierarchy, name_map, _, _ = load_structure()
+    
+    # Efficient Lookup Map
+    # map[part][chapter][standard] = [questions...]
+    content_map = {}
+    for q in db_data:
+        p = q.get('part', 'Unknown')
+        c = q.get('chapter', 'Unknown')
+        s = str(q.get('standard', 'Unknown'))
+        
+        if p not in content_map: content_map[p] = {}
+        if c not in content_map[p]: content_map[p][c] = {}
+        if s not in content_map[p][c]: content_map[p][c][s] = []
+        content_map[p][c][s].append(q)
+
+    # 렌더링
     for part in sorted(hierarchy.keys()):
+        # Part Expander
         with st.expander(f"📌 {part}", expanded=False):
-            for ch in sorted(hierarchy[part].keys(), key=get_chapter_sort_key):
-                st.markdown(f"- **{name_map.get(ch, ch)}**: {', '.join(hierarchy[part][ch])}")
+            # Sort Chapters (ch1, ch2...)
+            chapters = sorted(hierarchy[part].keys(), key=get_chapter_sort_key)
+            
+            for ch in chapters:
+                st.markdown(f"### {name_map.get(ch, ch)}")
+                
+                # Standards in this chapter
+                standards = hierarchy[part][ch]
+                
+                for std in standards:
+                    # Fetch questions for this P-C-S
+                    questions = content_map.get(part, {}).get(ch, {}).get(std, [])
+                    
+                    st.markdown(f"**기준서 {std}** ({len(questions)} 문제)")
+                    
+                    if not questions:
+                        st.caption("   (등록된 핵심 문제 없음)")
 
 def render_ranking():
     st.title("🏆 랭킹 (Leaderboard)")
@@ -439,19 +470,53 @@ def render_profile(db_data):
             if notes_df.empty:
                 st.info("오답 노트가 비어있습니다.")
             else:
-                q_map = {q['question']['description']: q['answer_data']['model_answer'] for q in db_data}
+                # [Group by Part -> Chapter]
+                # 1. Sort for consistent display
+                notes_df['part'] = notes_df['part'].fillna('Unknown')
+                notes_df['chapter'] = notes_df['chapter'].fillna('Unknown')
                 
-                for idx, row in notes_df.iterrows():
-                    m_ans = q_map.get(row['question'], "데이터 없음")
-                    m_ans_str = str(m_ans).replace('\n', '<br>') if not isinstance(m_ans, list) else ("• " + "<br>• ".join(m_ans))
-                    
-                    with st.expander(f"[{row['standard_code']}] {row['question'][:30]}... (점수: {row['score']})"):
-                        st.markdown(f"**Q. {row['question']}**")
-                        st.markdown(f"<div style='background-color:#2E3440; padding:10px; border-radius:5px;'>✅ {m_ans_str}</div>", unsafe_allow_html=True)
-                        st.caption(f"작성일: {row['created_at']}")
-                        if st.button("삭제", key=f"del_note_{row['id']}"):
-                            database.delete_review_note(row['id'])
-                            st.rerun()
+                # Hierarchy: Part -> Chapter -> Question
+                # Get unique parts
+                parts = sorted(notes_df['part'].unique())
+                
+                for part in parts:
+                    with st.expander(f"📂 {part}", expanded=False):
+                        part_df = notes_df[notes_df['part'] == part]
+                        chapters = sorted(part_df['chapter'].unique(), key=get_chapter_sort_key)
+                        
+                        for chap in chapters:
+                            st.markdown(f"**[{chap}]**")
+                            chap_df = part_df[part_df['chapter'] == chap]
+                            
+                            for idx, row in chap_df.iterrows():
+                                # Model Answer formatting
+                                m_ans = row['model_answer']
+                                if not m_ans: m_ans = "데이터 없음"
+                                
+                                # Check if it's a list string representation or just string
+                                if isinstance(m_ans, list):
+                                     m_ans_str = "• " + "<br>• ".join(m_ans)
+                                elif isinstance(m_ans, str) and m_ans.startswith('['):
+                                     # Try parsing if it looks like a list
+                                     try:
+                                         parsed = json.loads(m_ans.replace("'", '"'))
+                                         if isinstance(parsed, list):
+                                             m_ans_str = "• " + "<br>• ".join(parsed)
+                                         else:
+                                             m_ans_str = str(m_ans).replace('\n', '<br>')
+                                     except:
+                                         m_ans_str = str(m_ans).replace('\n', '<br>')
+                                else:
+                                     m_ans_str = str(m_ans).replace('\n', '<br>')
+
+                                with st.expander(f"[{row['standard_code']}] {row['title']} (점수: {row['score']})"):
+                                    st.markdown(f"**Q. {row['question']}**")
+                                    st.markdown(f"**내 답안:** {row['explanation']}")
+                                    st.markdown(f"<div style='background-color:#2E3440; padding:10px; border-radius:5px; margin-top:5px;'>✅ {m_ans_str}</div>", unsafe_allow_html=True)
+                                    st.caption(f"작성일: {row['created_at']}")
+                                    if st.button("삭제", key=f"del_note_{row['id']}"):
+                                        database.delete_review_note(row['id'])
+                                        st.rerun()
 
     with tab_hist:
         if df_all.empty:
@@ -493,7 +558,7 @@ def render_quiz(db_data):
         hierarchy, name_map, _, _ = load_structure()
         counts = get_counts(db_data)
         
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3 = st.columns([2, 2, 1])
         with c1: 
             # Part: 이름 + (개수)
             def fmt_part(x):
@@ -597,8 +662,12 @@ def render_quiz(db_data):
                                 if user_role in ['PRO', 'ADMIN'] and res['eval']['score'] <= 5.0:
                                     database.save_review_note(
                                         st.session_state.username, 
+                                        res['q']['part'],
+                                        res['q']['chapter'],
                                         res['q']['standard'],
+                                        res['q']['question']['title'],
                                         res['q']['question']['description'],
+                                        res['q']['answer_data']['model_answer'],
                                         res['ans'],
                                         res['eval']['score']
                                     )
@@ -670,7 +739,17 @@ def render_quiz(db_data):
             # [오답노트 수동 저장] 유료/관리자만 가능
             if user_role in ['PRO', 'ADMIN']:
                 if st.button("오답노트 저장"):
-                    database.save_review_note(st.session_state.username, q_data['standard'], q_data['question']['description'], u_ans, ev['score'])
+                    database.save_review_note(
+                        st.session_state.username, 
+                        q_data['part'],
+                        q_data['chapter'],
+                        q_data['standard'],
+                        q_data['question']['title'],
+                        q_data['question']['description'],
+                        q_data['answer_data']['model_answer'],
+                        u_ans, 
+                        ev['score']
+                    )
                     st.toast("저장되었습니다.")
             elif user_role == 'MEMBER':
                 st.caption("🔒 오답노트 저장 불가 (유료 전용)")
@@ -772,7 +851,7 @@ def main():
     if sel == "실전 훈련": render_quiz(db_data)
     elif sel == "랭킹": render_ranking()
     elif sel == "내 정보": render_profile(db_data)
-    elif sel == "커리큘럼": render_curriculum()
+    elif sel == "커리큘럼": render_curriculum(db_data)
     elif sel == "관리자 페이지" and st.session_state.user_role == 'ADMIN': render_admin()
 
 if __name__ == "__main__":
