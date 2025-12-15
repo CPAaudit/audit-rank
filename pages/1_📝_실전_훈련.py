@@ -223,7 +223,7 @@ def main():
         with c_btn2:
             if st.button("🏠 종료 및 홈으로", use_container_width=True):
                 st.session_state.app_state = 'SETUP'
-                st.switch_page("app.py")
+                st.switch_page("Home.py")
 
 if __name__ == "__main__":
     main()
