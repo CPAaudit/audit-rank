@@ -11,30 +11,45 @@ def init_db():
         key = st.secrets["SUPABASE"]["KEY"]
         return create_client(url, key)
     except Exception as e:
+        st.error(f"Supabase Connection Error: {e}")
+        print(f"DEBUG: Supabase Connection Error: {e}")
         return None
 
-supabase = init_db()
+# supabase = init_db() # REMOVED: Do not use global variable to avoid import-time failure
+
 
 # --- 사용자 로그인 및 정보 관리 ---
 def login_user(username, password):
     """로그인 처리"""
     try:
-        res = supabase.table("users").select("*").eq("username", username).execute()
-        if not res.data: return None # 유저 없음
+        client = init_db()
+        if not client:
+            st.error("Database connection failed.")
+            return None
+
+        # print(f"DEBUG: Attempting login for {username}")
+        res = client.table("users").select("*").eq("username", username).execute()
+        if not res.data: 
+            # print(f"DEBUG: User {username} not found in DB.")
+            return None # 유저 없음
         
         user = res.data[0]
         if user['password'] == password:
+            # print("DEBUG: Password match!")
             return user
         else:
+            # print("DEBUG: Password mismatch.")
             return None # 비번 불일치
-    except Exception:
+    except Exception as e:
+        st.error(f"Login Query Error: {e}")
+        print(f"DEBUG: Login Query Error: {e}")
         return None
 
 def register_user(username, password):
     """회원가입 처리"""
     try:
         # 중복 확인
-        res = supabase.table("users").select("username").eq("username", username).execute()
+        res = init_db().table("users").select("username").eq("username", username).execute()
         if res.data:
             return False # 이미 존재
             
@@ -45,7 +60,7 @@ def register_user(username, password):
             "exp": 0, 
             "role": "MEMBER"
         }
-        supabase.table("users").insert(new_user).execute()
+        init_db().table("users").insert(new_user).execute()
         return True
     except Exception:
         return False
@@ -53,7 +68,7 @@ def register_user(username, password):
 def update_progress(username, level, exp):
     """경험치 저장"""
     try:
-        supabase.table("users").update({"level": level, "exp": exp}).eq("username", username).execute()
+        init_db().table("users").update({"level": level, "exp": exp}).eq("username", username).execute()
     except Exception:
         pass
 
@@ -73,14 +88,14 @@ def save_review_note(username, part, chapter, standard, title, question, model_a
             "score": score,
             "created_at": datetime.now().isoformat()
         }
-        supabase.table("review_notes").insert(data).execute()
+        init_db().table("review_notes").insert(data).execute()
     except Exception as e:
         print(f"Error: {e}")
 
 def get_user_review_notes(username):
     """내 오답노트 조회"""
     try:
-        res = supabase.table("review_notes").select("*").eq("username", username).order("created_at", desc=True).execute()
+        res = init_db().table("review_notes").select("*").eq("username", username).order("created_at", desc=True).execute()
         return pd.DataFrame(res.data)
     except Exception:
         return pd.DataFrame()
@@ -88,14 +103,14 @@ def get_user_review_notes(username):
 def delete_review_note(note_id):
     """오답노트 삭제"""
     try:
-        supabase.table("review_notes").delete().eq("id", note_id).execute()
+        init_db().table("review_notes").delete().eq("id", note_id).execute()
     except Exception:
         pass
     
 def get_leaderboard_data():
     """랭킹 조회"""
     try:
-        res = supabase.table("users").select("username, role, level, exp").order("exp", desc=True).limit(10).execute()
+        res = init_db().table("users").select("username, role, level, exp").order("exp", desc=True).limit(10).execute()
         return pd.DataFrame(res.data)
     except:
         return pd.DataFrame()
@@ -103,7 +118,7 @@ def get_leaderboard_data():
 def get_all_users():
     """관리자용 유저 전체 조회"""
     try:
-        res = supabase.table("users").select("*").execute()
+        res = init_db().table("users").select("*").execute()
         return pd.DataFrame(res.data)
     except:
         return pd.DataFrame()
@@ -111,7 +126,7 @@ def get_all_users():
 def update_user_role(target_user, new_role):
     """관리자용 등급 변경"""
     try:
-        supabase.table("users").update({"role": new_role}).eq("username", target_user).execute()
+        init_db().table("users").update({"role": new_role}).eq("username", target_user).execute()
     except:
         pass
 
@@ -125,7 +140,7 @@ def save_quiz_result(username, standard, score):
             "score": score,
             "created_at": datetime.now().isoformat()
         }
-        supabase.table("quiz_history").insert(data).execute()
+        init_db().table("quiz_history").insert(data).execute()
     except Exception as e:
         print(f"Save quiz error: {e}")
 
@@ -134,13 +149,13 @@ def get_user_stats(username):
     stats = {'total_score': 0, 'recent_history': []}
     try:
         # 1. Total XP (users 테이블에서)
-        user_res = supabase.table("users").select("exp").eq("username", username).execute()
+        user_res = init_db().table("users").select("exp").eq("username", username).execute()
         if user_res.data:
             stats['total_score'] = user_res.data[0]['exp']
             
         # 2. 최근 기록 (quiz_history 테이블에서)
         # 퀴즈 히스토리 테이블이 없으면 에러가 날 수 있으므로 try-except 처리
-        hist_res = supabase.table("quiz_history").select("standard_code, score, created_at").eq("username", username).order("created_at", desc=True).limit(10).execute()
+        hist_res = init_db().table("quiz_history").select("standard_code, score, created_at").eq("username", username).order("created_at", desc=True).limit(10).execute()
         
         if hist_res.data:
             for item in hist_res.data:
@@ -157,7 +172,7 @@ def get_user_stats(username):
 def get_user_history_df(username):
     """전체 학습 이력 (그래프용)"""
     try:
-        res = supabase.table("quiz_history").select("*").eq("username", username).execute()
+        res = init_db().table("quiz_history").select("*").eq("username", username).execute()
         return pd.DataFrame(res.data)
     except Exception:
         return pd.DataFrame()
