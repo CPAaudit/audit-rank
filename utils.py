@@ -7,6 +7,7 @@ import matplotlib.font_manager as fm
 import numpy as np
 import google.generativeai as genai
 import random
+import time
 
 # [상수] 등급 정의 및 표시명
 ROLE_NAMES = {
@@ -179,12 +180,12 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
             "evaluation": f"📉 키워드가 부족합니다. (현재 {matched_count}개 / 최소 3개 필요)\n핵심 키워드를 포함하여 다시 작성해주세요."
         }
     
-    ratio = matched_count / len(keywords) if keywords else 0
-    if ratio >= 0.5:
-        ref_text = "기준서 참고 생략 (키워드 매칭률 50% 이상 - 사용자 지식 충분)"
-    else:
-        raw_ref_text = load_reference_text(std_code)
-        ref_text = raw_ref_text[:50000] if raw_ref_text else "관련 기준서 내용 없음"
+    # 기준서 참고 로직 제거 (사용자 요청: 모범답안 위주 채점 & 속도 향상)
+    ref_text = "기준서 참고 생략 (모범답안 기준 채점)"
+
+    # Retry Logic Configuration
+    max_retries = 3
+    base_delay = 2  # seconds
 
     try:
         genai.configure(api_key=api_key)
@@ -199,10 +200,11 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         sys_prompt = f"""
         당신은 회계감사 답안 채점관입니다. 
         사용자는 1차 키워드 검사(4개 이상 포함)를 통과했습니다.
-        제공된 모범답안 또는 회계감사 기준서를 기준으로 사용자 답안을 평가하여 10점 만점으로 점수를 매기세요.
+        **제공된 모범답안**을 기준으로 사용자 답안을 평가하여 10점 만점으로 점수를 매기세요.
+        (속도 향상을 위해 회계감사 기준서 원문 대조는 생략합니다.)
 
         [채점 기준: 전문용어 정밀성]
-        1. **전문용어 사용 필수**: 모범답안 또는 기준서상의 정확한 용어를 사용했는지 엄격하게 확인하십시오.
+        1. **전문용어 사용 필수**: 모범답안상의 정확한 용어를 사용했는지 확인하십시오.
         2. **유의어 감점**: 의미가 통하더라도 '정확한 용어'가 아니면 감점하십시오.
         3. 문맥과 논리가 정확해야 합니다.
         4. 점수는 0점에서 10점 사이의 정수 점수입니다.
@@ -211,8 +213,7 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         - 문제: {q_text}
         - 사용자 답안: {u_ans}
         - 모범 답안: {model_answer_str}
-        - 회계감사 기준서: {ref_text}
-
+        
         [출력 형식]
         반드시 마크다운 태그 없이 순수 **JSON 포맷**으로만 출력하시오.
         {{
@@ -220,13 +221,24 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
             "feedback": "부족한 점: [내용]\\n\\n잘한 점: [내용] (100자 이내)"
         }}
         """
-        res = model.generate_content(sys_prompt)
-        ai_res = json.loads(res.text.replace('```json', '').replace('```', '').strip())
         
-        final_score = float(ai_res.get('score', 0))
-        final_eval = ai_res.get('feedback', '피드백 없음')
-        
-        return {"score": round(final_score, 1), "evaluation": final_eval}
+        for attempt in range(max_retries):
+            try:
+                res = model.generate_content(sys_prompt)
+                ai_res = json.loads(res.text.replace('```json', '').replace('```', '').strip())
+                
+                final_score = float(ai_res.get('score', 0))
+                final_eval = ai_res.get('feedback', '피드백 없음')
+                
+                return {"score": round(final_score, 1), "evaluation": final_eval}
+            
+            except Exception as e:
+                if "504" in str(e) or "Deadline Exceeded" in str(e) or "429" in str(e):
+                    if attempt < max_retries - 1:
+                        time.sleep(base_delay * (2 ** attempt)) # Exponential backoff
+                        continue
+                raise e # Re-raise if not a retryable error or max retries reached
+
     except Exception as e: 
         return {"score": 0.0, "evaluation": f"AI 채점 실패: {str(e)}"}
 
