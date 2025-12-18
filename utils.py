@@ -174,86 +174,88 @@ def calculate_matched_count(user_ans, keywords):
     return count
 
 
+
 def grade_batch(items, api_key):
     """
-    Items: list of dict {'id': int, 'q': str, 'a': str, 'm': str}
+    Items: list of dict {'id': int, 'q': str, 'a': str, 'm': str, 'k': list, 'r': str}
     Returns: dict {id: {'score': float, 'evaluation': str}}
     """
     if not items: return {}
 
     try:
-        # User requested google-genai SDK
         client = genai.Client(api_key=api_key)
         
-        # optimized batch prompt with user's specific criteria
+        # 프롬프트 최적화: 키워드(k)와 요약된 해설(r)을 반영
         prompt_lines = [
-
             "당신은 회계감사 답안 채점관입니다.",
-            "제공된 모범답안 또는 회계감사 기준서를 기준으로 사용자 답안을 평가하여 0~10점 사이로 채점하세요.",
-            "",
-            "[채점 기준: 전문용어 정밀성]",
-            "1. **전문용어 사용 필수**: 모범답안 또는 기준서상의 정확한 용어를 사용했는지 엄격하게 확인하십시오.",
-            "2. **유의어 감점**: 의미가 통하더라도 '정확한 용어'가 아니면 감점하십시오.",
-            "3. **문맥과 논리**: 문맥과 논리가 정확해야 합니다.",
+            "제공된 [문제], [사용자 답안], [모범 답안], [핵심 키워드], [참고 설명]를 분석하여 0~10점으로 채점하세요.",
+            "[채점 기준]",
+            "1. **키워드 매칭(50%)**: 제시된 [핵심 키워드]가 사용자 답안에 포함되었는지 확인하십시오. 누락 시 감점.",
+            "2. **정확성(50%)**: 모범 답안 및 참고 설명의 논리와 일치하는지 평가하십시오.",
             "",
             "[출력 형식]",
-            "반드시 마크다운 태그 없이 순수 **JSON 리스트** 포맷으로만 출력하시오.",
-            "[{'id': id, 'score': 0~10숫자, 'feedback': '부족한 점: ... / 잘한 점: ... (100자 이내)'}]",
+            "마크다운 없이 **순수 JSON 리스트**만 출력하시오.",
+            "[{'id': 문제ID, 'score': 점수(정수 단위), 'feedback': '키워드 누락 여부 포함 구체적 피드백'}]",
             "---"
         ]
         
         for item in items:
+            keywords_str = ", ".join(item.get('k', [])) if item.get('k') else "별도 지정 없음"
+            
             p_line = (
                 f"ID: {item['id']}\n"
                 f"문제: {item['q']}\n"
-                f"사용자 답안: {item['a']}\n"
+                f"핵심 키워드: {keywords_str}\n"
                 f"모범 답안: {item['m']}\n"
-                f"회계감사 기준서: {item.get('r', '참고 기준서 없음')}\n"
+                f"참고 설명: {item.get('r', '없음')}\n"
+                f"사용자 답안: {item['a']}\n"
                 f"---\n"
             )
             prompt_lines.append(p_line)
             
         full_prompt = "\n".join(prompt_lines)
 
-        # 40s timeout for batch
-        # New SDK usage: client.models.generate_content
+        # AI 모델 호출
         res = client.models.generate_content(
             model='gemini-2.5-flash-lite',
             contents=full_prompt,
-            config={
-                'response_mime_type': 'application/json',
-                'temperature': 0.0
-            }
+            config={'response_mime_type': 'application/json', 'temperature': 0.1}
         )
         
-        # Parse output
+        # [안전 장치] 정규표현식으로 JSON 리스트만 추출
         try:
-            # Handle potential markdown wrapping
             text = res.text.strip()
+            # Markdown code block strip
             if text.startswith("```json"): text = text[7:]
             if text.endswith("```"): text = text[:-3]
             
-            result_list = json.loads(text)
-            
-            output_map = {}
-            for r in result_list:
-                output_map[r['id']] = {
-                    "score": float(r.get('score', 0)),
-                    "evaluation": r.get('feedback', '피드백 없음')
-                }
-            return output_map
+            # Regex search as a fallback/confirmation
+            match = re.search(r'\[.*\]', text, re.DOTALL)
+            if match:
+                result_list = json.loads(match.group(0))
+                output_map = {}
+                for r in result_list:
+                    output_map[r['id']] = {
+                        "score": float(r.get('score', 0)),
+                        "evaluation": r.get('feedback', '피드백 없음')
+                    }
+                return output_map
+            else:
+                # Direct load attempt if regex fails (sometimes raw json is returned)
+                try:
+                    result_list = json.loads(text)
+                    return {r['id']: {"score": float(r.get('score', 0)), "evaluation": r.get('feedback')} for r in result_list}
+                except:
+                    raise ValueError("JSON 형식을 찾을 수 없음")
 
         except Exception as e:
-            # Json parse fail fallback
             return {i['id']: {"score": 0.0, "evaluation": f"채점 형식 오류: {str(e)}"} for i in items}
 
     except Exception as e:
+        # API 오류 처리
         err_msg = str(e)
-        fallback_msg = f"일시적 오류: {err_msg}"
-        if "timeout" in err_msg.lower(): fallback_msg = "⏳ AI 응답 시간 초과 (Batch)"
-        elif "429" in err_msg: fallback_msg = "⚠️ 요청량 초과 (잠시 후 시도)"
-        
-        return {i['id']: {"score": 0.0, "evaluation": fallback_msg} for i in items}
+        if "429" in err_msg: err_msg = "⚠️ 요청량 초과 (잠시 후 시도)"
+        return {i['id']: {"score": 0.0, "evaluation": f"오류: {err_msg}"} for i in items}
 
 def draw_target(score):
     fig, ax = plt.subplots(figsize=(4, 4))

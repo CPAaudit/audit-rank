@@ -109,14 +109,18 @@ def main():
                             "eval": {"score": 0.0, "evaluation": "답안이 너무 짧습니다. (최소 5자 이상)"}
                         }
                     else:
-                        # Fetch reference text
-                        ref_text = utils.load_reference_text(q['standard'])
+                        # [Optimization] Use 'explanation' and 'keywords' directly from data
+                        ans_data = q['answer_data']
+                        m_ans = ans_data.get('model_answer', [])
+                        m_str = "\n".join(m_ans) if isinstance(m_ans, list) else str(m_ans)
+                        
                         batch_items.append({
                             'id': idx,
-                            'q': q['question']['description'],
+                            'q': q['question']['title'] + " - " + q['question']['description'],
                             'a': ans,
-                            'm': q['answer_data'].get('model_answer', ''),
-                            'r': ref_text
+                            'm': m_str,
+                            'k': ans_data.get('keywords', []),    # Keywords
+                            'r': ans_data.get('explanation', "참고 설명 없음")  # Explanation
                         })
                 
                 if batch_items:
