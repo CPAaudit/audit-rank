@@ -95,7 +95,7 @@ def main():
             
             if st.form_submit_button("제출", type="primary", use_container_width=True):
                 try: api_key = st.secrets["GOOGLE_API_KEY"]
-                except: st.error("API Key 설정 필요"); return
+                except: st.error("API Key 설정 필요 (GOOGLE_API_KEY)"); return
                 
                 results = [None]*len(st.session_state.quiz_list)
                 
@@ -103,28 +103,36 @@ def main():
                     ev = utils.grade_with_ai_model(q['question']['description'], ans, q['answer_data'], q['standard'], api_key)
                     return i, {"q": q, "ans": ans, "eval": ev}
                 
-                with st.spinner("채점 및 분석 중..."):
-                    # Concurrency Limit: max_workers=10 for speed
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as exc:
-                        futures = [exc.submit(task, i, q, st.session_state.answers[q['question']['title']]) for i, q in enumerate(st.session_state.quiz_list)]
-                        for f in concurrent.futures.as_completed(futures):
-                            i, res = f.result()
-                            results[i] = res
-                            
-                            if user_role != 'GUEST':
-                                database.save_quiz_result(st.session_state.username, res['q']['standard'], res['eval']['score'])
-                                if user_role in ['PRO', 'ADMIN'] and res['eval']['score'] <= 5.0:
-                                    database.save_review_note(
-                                        st.session_state.username, 
-                                        res['q']['part'],
-                                        res['q']['chapter'],
-                                        res['q']['standard'],
-                                        res['q']['question']['title'],
-                                        res['q']['question']['description'],
-                                        res['q']['answer_data']['model_answer'],
-                                        res['ans'],
-                                        res['eval']['score']
-                                    )
+                prog_bar = st.progress(0, text="채점 및 분석 중...")
+                total_q = len(st.session_state.quiz_list)
+                done_cnt = 0
+                
+                # Concurrency Limit: max_workers=10 for speed
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as exc:
+                    futures = [exc.submit(task, i, q, st.session_state.answers[q['question']['title']]) for i, q in enumerate(st.session_state.quiz_list)]
+                    for f in concurrent.futures.as_completed(futures):
+                        i, res = f.result()
+                        results[i] = res
+                        
+                        done_cnt += 1
+                        prog_bar.progress(done_cnt / total_q, text=f"채점 중... ({done_cnt}/{total_q})")
+                        
+                        if user_role != 'GUEST':
+                            database.save_quiz_result(st.session_state.username, res['q']['standard'], res['eval']['score'])
+                            if user_role in ['PRO', 'ADMIN'] and res['eval']['score'] <= 5.0:
+                                database.save_review_note(
+                                    st.session_state.username, 
+                                    res['q']['part'],
+                                    res['q']['chapter'],
+                                    res['q']['standard'],
+                                    res['q']['question']['title'],
+                                    res['q']['question']['description'],
+                                    res['q']['answer_data']['model_answer'],
+                                    res['ans'],
+                                    res['eval']['score']
+                                )
+                
+                prog_bar.empty()
 
                 st.session_state.results = results
                 st.session_state.review_idx = 0

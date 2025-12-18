@@ -10,6 +10,7 @@ import random
 import time
 
 
+
 # [상수] 등급 정의 및 표시명
 ROLE_NAMES = {
     'GUEST': '유예생 (비회원)',
@@ -170,7 +171,7 @@ def calculate_matched_count(user_ans, keywords):
     return sum(1 for kw in keywords if kw.replace(' ', '').lower() in user_ans_norm)
 
 def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
-    if not u_ans or len(u_ans.strip()) < 2: return {"score": 0.0, "evaluation": "답안 미작성"}
+    if not u_ans or len(u_ans.strip()) < 5: return {"score": 0.0, "evaluation": "답안이 너무 짧습니다. (최소 5자 이상)"}
     
     keywords = a_data.get('keywords', [])
     matched_count = calculate_matched_count(u_ans, keywords)
@@ -198,7 +199,6 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         else:
              model_answer_str = str(model_answer)
 
-        # Optimized Prompt & Config
         sys_prompt = f"""
         Role: Strict Auditor.
         Task: Grade user answer based on model answer. 0-10 score.
@@ -217,13 +217,13 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         """
         
         try:
-            # 30-second timeout, JSON Mode, Temperature 0
+            # 30-second timeout, JSON Mode, Temperature 0, User-Agent removed (not needed for Gemini SDK)
             res = model.generate_content(
                 sys_prompt, 
                 generation_config={"response_mime_type": "application/json", "temperature": 0.0},
                 request_options={'timeout': 30}
             )
-            ai_res = json.loads(res.text) # Native JSON mode returns raw JSON, no markdown stripping needed usually
+            ai_res = json.loads(res.text)
             
             final_score = float(ai_res.get('score', 0))
             final_eval = ai_res.get('feedback', '피드백 없음')
@@ -232,16 +232,22 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         
         except Exception as e:
             err_msg = str(e)
-            # If timeout or deadline exceeded, return fallback result immediately
             if "504" in err_msg or "Deadline Exceeded" in err_msg or "timeout" in err_msg.lower():
                  return {
                     "score": 0.0, 
                     "evaluation": "⏳ AI 채점 응답 시간이 초과되었습니다. (30초)\n\nAI 응답이 늦어지고 있습니다. 아래 **모범 답안**을 참고하여 스스로 점검해보세요."
                 }
-            raise e # Other errors (e.g. auth, quota) should still raise or be handled by outer except
+            if "429" in err_msg:
+                 return {
+                    "score": 0.0, 
+                    "evaluation": "⚠️ AI 요청이 너무 많습니다. 잠시 후 다시 시도해주세요. (429)"
+                }
+            raise e
 
     except Exception as e: 
         return {"score": 0.0, "evaluation": f"AI 채점 실패: {str(e)}"}
+
+
 
 def draw_target(score):
     fig, ax = plt.subplots(figsize=(4, 4))
