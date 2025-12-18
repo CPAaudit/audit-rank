@@ -104,8 +104,8 @@ def main():
                     return i, {"q": q, "ans": ans, "eval": ev}
                 
                 with st.spinner("채점 및 분석 중..."):
-                    # Concurrency Limit: max_workers=3 for stability
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exc:
+                    # Concurrency Limit: max_workers=10 for speed
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as exc:
                         futures = [exc.submit(task, i, q, st.session_state.answers[q['question']['title']]) for i, q in enumerate(st.session_state.quiz_list)]
                         for f in concurrent.futures.as_completed(futures):
                             i, res = f.result()

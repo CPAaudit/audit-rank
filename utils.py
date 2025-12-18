@@ -8,7 +8,7 @@ import numpy as np
 import google.generativeai as genai
 import random
 import time
-import openai
+
 
 # [상수] 등급 정의 및 표시명
 ROLE_NAMES = {
@@ -184,13 +184,13 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
     # 기준서 참고 로직 제거 (사용자 요청: 모범답안 위주 채점 & 속도 향상)
     ref_text = "기준서 참고 생략 (모범답안 기준 채점)"
 
-    # Retry Logic Configuration
-    max_retries = 3
-    base_delay = 2  # seconds
+    # Retry Logic Configuration (Removed unused retry variables)
+    # max_retries = 3
+    # base_delay = 2  # seconds
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
         model_answer = a_data.get('model_answer', "")
         if isinstance(model_answer, list):
@@ -198,47 +198,47 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         else:
              model_answer_str = str(model_answer)
 
+        # Optimized Prompt & Config
         sys_prompt = f"""
-        당신은 회계감사 답안 채점관입니다. 
-        사용자는 1차 키워드 검사(4개 이상 포함)를 통과했습니다.
-        **제공된 모범답안**을 기준으로 사용자 답안을 평가하여 10점 만점으로 점수를 매기세요.
-        (속도 향상을 위해 회계감사 기준서 원문 대조는 생략합니다.)
+        Role: Strict Auditor.
+        Task: Grade user answer based on model answer. 0-10 score.
+        Criteria: Exact terminology required. Logic must be sound.
 
-        [채점 기준: 전문용어 정밀성]
-        1. **전문용어 사용 필수**: 모범답안상의 정확한 용어를 사용했는지 확인하십시오.
-        2. **유의어 감점**: 의미가 통하더라도 '정확한 용어'가 아니면 감점하십시오.
-        3. 문맥과 논리가 정확해야 합니다.
-        4. 점수는 0점에서 10점 사이의 정수 점수입니다.
+        Input:
+        Q: {q_text}
+        User: {u_ans}
+        Model: {model_answer_str}
 
-        [입력 데이터]
-        - 문제: {q_text}
-        - 사용자 답안: {u_ans}
-        - 모범 답안: {model_answer_str}
-        
-        [출력 형식]
-        반드시 마크다운 태그 없이 순수 **JSON 포맷**으로만 출력하시오.
+        Output JSON Schema:
         {{
-            "score": 0 ~ 10 사이의 숫자,
-            "feedback": "부족한 점: [내용]\\n\\n잘한 점: [내용] (100자 이내)"
+            "score": number, 
+            "feedback": "Concise feedback (max 100 chars)"
         }}
         """
         
-        for attempt in range(max_retries):
-            try:
-                res = model.generate_content(sys_prompt)
-                ai_res = json.loads(res.text.replace('```json', '').replace('```', '').strip())
-                
-                final_score = float(ai_res.get('score', 0))
-                final_eval = ai_res.get('feedback', '피드백 없음')
-                
-                return {"score": round(final_score, 1), "evaluation": final_eval}
+        try:
+            # 30-second timeout, JSON Mode, Temperature 0
+            res = model.generate_content(
+                sys_prompt, 
+                generation_config={"response_mime_type": "application/json", "temperature": 0.0},
+                request_options={'timeout': 30}
+            )
+            ai_res = json.loads(res.text) # Native JSON mode returns raw JSON, no markdown stripping needed usually
             
-            except Exception as e:
-                if "504" in str(e) or "Deadline Exceeded" in str(e) or "429" in str(e):
-                    if attempt < max_retries - 1:
-                        time.sleep(base_delay * (2 ** attempt)) # Exponential backoff
-                        continue
-                raise e # Re-raise if not a retryable error or max retries reached
+            final_score = float(ai_res.get('score', 0))
+            final_eval = ai_res.get('feedback', '피드백 없음')
+            
+            return {"score": round(final_score, 1), "evaluation": final_eval}
+        
+        except Exception as e:
+            err_msg = str(e)
+            # If timeout or deadline exceeded, return fallback result immediately
+            if "504" in err_msg or "Deadline Exceeded" in err_msg or "timeout" in err_msg.lower():
+                 return {
+                    "score": 0.0, 
+                    "evaluation": "⏳ AI 채점 응답 시간이 초과되었습니다. (30초)\n\nAI 응답이 늦어지고 있습니다. 아래 **모범 답안**을 참고하여 스스로 점검해보세요."
+                }
+            raise e # Other errors (e.g. auth, quota) should still raise or be handled by outer except
 
     except Exception as e: 
         return {"score": 0.0, "evaluation": f"AI 채점 실패: {str(e)}"}
