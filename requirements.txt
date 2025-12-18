@@ -6,3 +6,4 @@ google-generativeai
 bcrypt
 streamlit-option-menu
 supabase
+openai
