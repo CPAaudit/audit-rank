@@ -94,8 +94,8 @@ def main():
                 st.session_state.answers[q['question']['title']] = st.text_area(f"답안 {idx+1}", height=100, label_visibility="collapsed")
             
             if st.form_submit_button("제출", type="primary", use_container_width=True):
-                try: api_key = st.secrets["PERPLEXITY_API_KEY"]
-                except: st.error("Perplexity API Key 설정 필요 (.streamlit/secrets.toml)"); return
+                try: api_key = st.secrets["GOOGLE_API_KEY"]
+                except: st.error("API Key 설정 필요"); return
                 
                 results = [None]*len(st.session_state.quiz_list)
                 

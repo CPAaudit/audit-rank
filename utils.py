@@ -186,15 +186,12 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
 
     # Retry Logic Configuration
     max_retries = 3
-    base_delay = 2
+    base_delay = 2  # seconds
 
     try:
-        # Perplexity API Configuration (OpenAI Client Compatible)
-        client = openai.OpenAI(
-            api_key=api_key,
-            base_url="https://api.perplexity.ai"
-        )
-        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
         model_answer = a_data.get('model_answer', "")
         if isinstance(model_answer, list):
              model_answer_str = "\n".join(model_answer)
@@ -205,7 +202,7 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         당신은 회계감사 답안 채점관입니다. 
         사용자는 1차 키워드 검사(4개 이상 포함)를 통과했습니다.
         **제공된 모범답안**을 기준으로 사용자 답안을 평가하여 10점 만점으로 점수를 매기세요.
-        (회계감사 기준서 원문 대조는 생략합니다.)
+        (속도 향상을 위해 회계감사 기준서 원문 대조는 생략합니다.)
 
         [채점 기준: 전문용어 정밀성]
         1. **전문용어 사용 필수**: 모범답안상의 정확한 용어를 사용했는지 확인하십시오.
@@ -226,25 +223,10 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
         }}
         """
         
-        messages = [
-            {"role": "system", "content": "You are a strict specialized auditor grading assistant."},
-            {"role": "user", "content": sys_prompt}
-        ]
-
         for attempt in range(max_retries):
             try:
-                # Use Perplexity's 'sonar' model as requested
-                response = client.chat.completions.create(
-                    model="sonar", 
-                    messages=messages,
-                    temperature=0.2
-                )
-                
-                content = response.choices[0].message.content
-                # Clean up markdown code blocks if present
-                clean_content = content.replace('```json', '').replace('```', '').strip()
-                
-                ai_res = json.loads(clean_content)
+                res = model.generate_content(sys_prompt)
+                ai_res = json.loads(res.text.replace('```json', '').replace('```', '').strip())
                 
                 final_score = float(ai_res.get('score', 0))
                 final_eval = ai_res.get('feedback', '피드백 없음')
@@ -252,11 +234,11 @@ def grade_with_ai_model(q_text, u_ans, a_data, std_code, api_key):
                 return {"score": round(final_score, 1), "evaluation": final_eval}
             
             except Exception as e:
-                # Retry on network errors or standard API errors
-                if attempt < max_retries - 1:
-                    time.sleep(base_delay * (2 ** attempt))
-                    continue
-                raise e
+                if "504" in str(e) or "Deadline Exceeded" in str(e) or "429" in str(e):
+                    if attempt < max_retries - 1:
+                        time.sleep(base_delay * (2 ** attempt)) # Exponential backoff
+                        continue
+                raise e # Re-raise if not a retryable error or max retries reached
 
     except Exception as e: 
         return {"score": 0.0, "evaluation": f"AI 채점 실패: {str(e)}"}
