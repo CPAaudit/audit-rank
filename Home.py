@@ -7,6 +7,15 @@ import time
 st.set_page_config(page_title="Audit Rank | Home", page_icon="🏹", layout="wide")
 utils.local_css()
 
+import streamlit as st
+import utils
+import database
+import time
+
+# [Page Config]
+st.set_page_config(page_title="Audit Rank | Home", page_icon="🏹", layout="wide")
+utils.local_css()
+
 def main():
     database.init_db()
     
@@ -18,6 +27,25 @@ def main():
     if 'solved_questions' not in st.session_state: st.session_state.solved_questions = set()
     if 'last_quiz_params' not in st.session_state: st.session_state.last_quiz_params = {}
     
+    # [OAuth Callback Handling]
+    if 'code' in st.query_params:
+        code = st.query_params['code']
+        with st.spinner("로그인 처리 중..."):
+            user = database.exchange_code_for_session(code)
+            if user:
+                st.session_state.username = user['username']
+                st.session_state.user_role = user.get('role', 'MEMBER')
+                st.session_state.level = user.get('level', 1)
+                st.session_state.exp = user.get('exp', 0)
+                st.success(f"로그인 성공! {user['username']}님 환영합니다.")
+                # Clear Query Params
+                st.query_params.clear()
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("로그인 실패 (세션 교환 오류)")
+                st.query_params.clear()
+
     st.title("Audit Rank 🏹")
     
     # --- Login / Signup ---
@@ -25,38 +53,55 @@ def main():
         tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
         
         with tab_login:
+            st.subheader("이메일로 로그인")
             with st.form("login_form"):
-                uid = st.text_input("ID")
-                upw = st.text_input("PW", type="password")
+                email = st.text_input("이메일 (Email)")
+                upw = st.text_input("비밀번호 (PW)", type="password")
+                
                 if st.form_submit_button("로그인", type="primary", use_container_width=True):
-                    user = database.verify_user(uid, upw)
+                    user = database.login_user(email, upw)
                     if user:
                         st.session_state.username = user['username']
-                        st.session_state.user_role = user['role']
-                        st.session_state.level = user['level']
-                        st.session_state.exp = user['exp']
+                        st.session_state.user_role = user.get('role', 'MEMBER')
+                        st.session_state.level = user.get('level', 1)
+                        st.session_state.exp = user.get('exp', 0)
                         st.success(f"환영합니다, {user['username']}님!")
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error("ID 또는 비밀번호가 잘못되었습니다.")
-                        
+                        st.error("이메일 또는 비밀번호가 잘못되었습니다.")
+            
+            st.markdown("---")
+            st.subheader("소셜 계정으로 로그인")
+            if st.button("Kakao로 로그인", icon="🇰", use_container_width=True):
+                url = database.login_with_oauth("kakao")
+                if url: st.markdown(f"<meta http-equiv='refresh' content='0; url={url}'>", unsafe_allow_html=True)
+            
+            st.info("ℹ️ 소셜 로그인은 팝업 창이 뜨거나 리다이렉트됩니다.")
+
         with tab_signup:
+            st.warning("⚠️ 기존 ID 사용자는 이메일로 새로 가입해야 합니다.")
             with st.form("signup_form"):
-                new_uid = st.text_input("새 ID")
-                new_upw = st.text_input("새 PW", type="password")
-                new_upw_chk = st.text_input("PW 확인", type="password")
+                new_email = st.text_input("이메일 (Email)")
+                new_username = st.text_input("닉네임 (Username)")
+                new_upw = st.text_input("비밀번호 (PW)", type="password")
+                new_upw_chk = st.text_input("비밀번호 확인", type="password")
                 
                 if st.form_submit_button("회원가입"):
-                    if not new_uid or not new_upw:
-                        st.error("ID와 PW를 입력해주세요.")
+                    if not new_email or not new_upw or not new_username:
+                        st.error("모든 항목을 입력해주세요.")
                     elif new_upw != new_upw_chk:
                         st.error("비밀번호가 일치하지 않습니다.")
                     else:
-                        if database.create_user(new_uid, new_upw):
-                            st.success("가입 완료! 로그인 탭에서 로그인해주세요.")
+                        res = database.register_user(new_email, new_upw, new_username)
+                        if res == "SUCCESS":
+                            st.success("가입 완료! 로그인 탭에서 로그인해주세요. (이메일 확인이 필요할 수 있습니다)")
+                        elif res == "CHECK_EMAIL":
+                            st.success("가입 접수 완료! 이메일함을 확인하여 인증 링크를 클릭해주세요.")
+                        elif res == "USERNAME_EXISTS":
+                            st.error("이미 사용 중인 닉네임입니다.")
                         else:
-                            st.error("이미 존재하는 ID입니다.")
+                            st.error(f"회원가입 오류: {res}")
                             
     else:
         # --- Dashboard (Logged In) ---
@@ -110,11 +155,15 @@ def main():
             st.subheader("관리자 메뉴")
             st.page_link("pages/9_🛠️_관리자.py", label="관리자 페이지 이동", icon="🛠️")
             
-        # Logout
+        # Logout (Clear Session)
         st.divider()
         if st.button("로그아웃", type="secondary"):
             st.session_state.username = None
             st.session_state.user_role = None
+            # Do we need to sign out from Supabase client too? 
+            # Client usually handles it, but creating new client instance clears local state mostly in Streamlit context.
+            # Explicit sign out is good practice but not strictly mandatory for simple token based auth in Streamlit session.
+            # client.auth.sign_out() # Optional
             st.rerun()
 
 if __name__ == "__main__":
