@@ -27,24 +27,7 @@ def main():
     if 'solved_questions' not in st.session_state: st.session_state.solved_questions = set()
     if 'last_quiz_params' not in st.session_state: st.session_state.last_quiz_params = {}
     
-    # [OAuth Callback Handling]
-    if 'code' in st.query_params:
-        code = st.query_params['code']
-        with st.spinner("로그인 처리 중..."):
-            user = database.exchange_code_for_session(code)
-            if user:
-                st.session_state.username = user['username']
-                st.session_state.user_role = user.get('role', 'MEMBER')
-                st.session_state.level = user.get('level', 1)
-                st.session_state.exp = user.get('exp', 0)
-                st.success(f"로그인 성공! {user['username']}님 환영합니다.")
-                # Clear Query Params
-                st.query_params.clear()
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("로그인 실패 (세션 교환 오류)")
-                st.query_params.clear()
+    # [OAuth Callback Handling] - REMOVED
 
     st.title("Audit Rank 🏹")
     
@@ -70,14 +53,7 @@ def main():
                         st.rerun()
                     else:
                         st.error("이메일 또는 비밀번호가 잘못되었습니다.")
-            
-            st.markdown("---")
-            st.subheader("소셜 계정으로 로그인")
-            if st.button("Kakao로 로그인", icon="🇰", use_container_width=True):
-                url = database.login_with_oauth("kakao")
-                if url: st.markdown(f"<meta http-equiv='refresh' content='0; url={url}'>", unsafe_allow_html=True)
-            
-            st.info("ℹ️ 소셜 로그인은 팝업 창이 뜨거나 리다이렉트됩니다.")
+
 
         with tab_signup:
             st.warning("⚠️ 기존 ID 사용자는 이메일로 새로 가입해야 합니다.")
