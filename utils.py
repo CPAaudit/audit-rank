@@ -12,9 +12,9 @@ import random
 
 # [상수] 등급 정의 및 표시명
 ROLE_NAMES = {
-    'GUEST': '비예우(비회원)',
-    'MEMBER': '공인회계사(무료)',
-    'PRO': '등록공인회계사(유료)',
+    'GUEST': '비회원',
+    'MEMBER': '공인회계사',
+    'PRO': '등록공인회계사',
     'ADMIN': '관리자'
 }
 

@@ -1,3 +1,4 @@
+
 import streamlit as st
 import utils
 import database
@@ -103,7 +104,7 @@ def main():
 
     with tab_notes:
         if not is_paid_or_admin:
-            st.warning("🔒 오답 노트는 '등록공인회계사(유료회원)' 전용 기능입니다.")
+            st.warning("🔒 오답 노트는 '등록공인회계사' 전용 기능입니다.")
         else:
             notes_df = database.get_user_review_notes(username)
             if notes_df.empty:

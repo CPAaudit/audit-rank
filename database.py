@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime
 
 # 1. Supabase 연결 초기화
-@st.cache_resource
 def init_db():
     try:
         url = st.secrets["SUPABASE"]["URL"]
