@@ -22,6 +22,8 @@ def login_user(email, password):
         # 1. Auth Login
         res = client.auth.sign_in_with_password({"email": email, "password": password})
         if res.user:
+            if res.session:
+                st.session_state['sb_session'] = res.session
             return _get_combined_profile(client, res.user)
     except Exception as e:
         print(f"Login Error: {e}")
@@ -47,6 +49,8 @@ def register_user(email, password, username):
         })
         
         if res.user:
+            if res.session:
+                st.session_state['sb_session'] = res.session
             # 2. Create Public Profile
             # Note: valid user ID is available only if email is confirmed or auto-confirmed.
             # We assume auto-confirm for dev, otherwise we need to handle "check email" flow.
@@ -195,6 +199,16 @@ def update_progress(username, level, exp):
 def save_review_note(username, title, user_answer, score, user_id=None):
     try:
         client = init_db()
+        
+        # Apply Auth Session if available
+        if 'sb_session' in st.session_state and st.session_state.sb_session:
+            try:
+                client.auth.set_session(
+                    st.session_state.sb_session.access_token, 
+                    st.session_state.sb_session.refresh_token
+                )
+            except: pass # Session might be expired
+
         question_id = None
         
         # Look up Question ID
@@ -220,9 +234,11 @@ def save_review_note(username, title, user_answer, score, user_id=None):
             "created_at": datetime.now().isoformat()
         }
         client.table("review_notes").insert(data).execute()
+        return True
     except Exception as e: 
         st.error(f"Save Note Error: {e}")
         print(f"Error: {e}")
+        return False
 
 def get_user_review_notes(username, user_id=None):
     try:

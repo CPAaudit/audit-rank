@@ -242,14 +242,16 @@ def main():
             
             if user_role in ['PRO', 'ADMIN']:
                 if st.button("오답노트 저장"):
-                    database.save_review_note(
+                    if database.save_review_note(
                         st.session_state.username, 
                         q_data['question_title'],
                         u_ans, 
                         ev['score'],
                         user_id=st.session_state.get('user_id')
-                    )
-                    st.toast("저장되었습니다.")
+                    ):
+                        st.toast("저장되었습니다.")
+                    else:
+                        st.error("저장 실패 (로그 확인)")
             elif user_role == 'MEMBER':
                 st.caption("🔒 오답노트 저장 불가 (유료 전용)")
 
