@@ -53,6 +53,12 @@ def load_structure():
     current_part = None
     base_dir = os.path.dirname(os.path.abspath(__file__))
     structure_path = os.path.join(base_dir, 'structure.md')
+
+    
+    if not os.path.exists(structure_path):
+        st.error(f"Structure file not found at: {structure_path}")
+        return {}, {}, {}, {}
+
     try:
         with open(structure_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -86,7 +92,8 @@ def load_structure():
                         except: pass
                     else:
                         chapter_map[short_code] = short_code
-    except: pass
+    except Exception as e:
+        st.error(f"Error loading structure: {e}")
     return hierarchy, name_map, part_code_map, chapter_map
 
 @st.cache_data(ttl=3600)
