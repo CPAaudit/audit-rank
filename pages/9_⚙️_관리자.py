@@ -14,7 +14,7 @@ def main():
         
     st.title("⚙️ 관리자 페이지 (문제 관리)")
     
-    tab_add, tab_manage = st.tabs(["➕ 문제 추가", "🛠️ 문제 수정/삭제"])
+    tab_add, tab_manage, tab_users = st.tabs(["➕ 문제 추가", "🛠️ 문제 수정/삭제", "👥 회원 관리"])
     
     # Common Data
     hierarchy, name_map, _, _ = utils.load_structure()
@@ -158,6 +158,36 @@ def main():
                             st.rerun()
                         else:
                             st.error("삭제 실패")
+
+    # --- TAB 3: USER MANAGEMENT ---
+    with tab_users:
+        st.subheader("회원 관리")
+        try:
+            users = database.get_all_users()
+            if users.empty:
+                st.info("회원이 없습니다.")
+            else:
+                st.dataframe(users[['username', 'role', 'level', 'exp', 'created_at']], use_container_width=True)
+                
+                st.divider()
+                st.write("##### 등급 변경")
+                c_u1, c_u2 = st.columns(2)
+                with c_u1:
+                    target_username = st.selectbox("사용자 선택", users['username'].unique())
+                with c_u2:
+                    new_role = st.selectbox("변경할 등급", list(utils.ROLE_NAMES.keys()), index=list(utils.ROLE_NAMES.keys()).index('MEMBER'))
+                    
+                if st.button("등급 변경 적용", type="primary"):
+                    if target_username == '준영2': # Hardcoded protection example
+                         st.error("최고 관리자 보호")
+                    else:
+                        if database.update_user_role(target_username, new_role):
+                            st.success(f"'{target_username}'님의 등급이 '{new_role}'({utils.ROLE_NAMES[new_role]})로 변경되었습니다.")
+                            st.rerun()
+                        else:
+                            st.error("변경 실패")
+        except Exception as e:
+            st.error(f"Error loading users: {e}")
 
 if __name__ == "__main__":
     main()

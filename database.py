@@ -265,6 +265,14 @@ def delete_review_note(note_id):
         init_db().table("review_notes").delete().eq("id", note_id).execute()
     except: pass
 
+def update_user_role(username, new_role):
+    try:
+        init_db().table("users").update({"role": new_role}).eq("username", username).execute()
+        return True
+    except Exception as e:
+        print(f"Role Update Error: {e}")
+        return False
+
 def fetch_all_questions():
     """Fetches all questions from the audit_questions table."""
     try:
