@@ -88,10 +88,10 @@ def load_structure():
                             if len(rng) >= 2:
                                 start, end = int(rng[0]), int(rng[1])
                                 for i in range(start, end + 1):
-                                    chapter_map[f"{prefix}{i}"] = short_code
+                                    chapter_map[f"{prefix}{i}"] = full_name
                         except: pass
                     else:
-                        chapter_map[short_code] = short_code
+                        chapter_map[short_code] = full_name
     except Exception as e:
         st.error(f"Error loading structure: {e}")
     return hierarchy, name_map, part_code_map, chapter_map

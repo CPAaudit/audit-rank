@@ -51,7 +51,6 @@ def main():
                 ma_input = st.text_area("모범 답안 (줄바꿈으로 구분)", height=100, placeholder="첫번째 문장\n두번째 문장")
                 
             expl = st.text_area("참고 설명 (Official Explanation)", height=100)
-            
             if st.form_submit_button("문제 추가", type="primary"):
                 if not title or not desc:
                     st.error("제목과 본문은 필수입니다.")
@@ -60,9 +59,16 @@ def main():
                     keywords = [k.strip() for k in kw_input.split(',') if k.strip()]
                     model_ans = [m.strip() for m in ma_input.split('\n') if m.strip()]
                     
+                    # EXTRACT NUMBERS ONLY
+                    p_match = utils.re.search(r'(\d+)', sel_part)
+                    sv_part = p_match.group(1) if p_match else sel_part
+                    
+                    c_match = utils.re.search(r'(\d+)', sel_chap)
+                    sv_chap = c_match.group(1) if c_match else sel_chap
+                    
                     data = {
-                        "part": sel_part,
-                        "chapter": sel_chap,
+                        "part": sv_part,
+                        "chapter": sv_chap,
                         "standard": sel_std,
                         "question_title": title,
                         "question_description": desc,
@@ -114,8 +120,8 @@ def main():
                     st.caption(f"ID: {target_q.get('id')}")
                     
                     ec1, ec2, ec3 = st.columns(3)
-                    new_part = ec1.text_input("Part", target_q.get('part', ''))
-                    new_chap = ec2.text_input("Chapter", target_q.get('chapter', ''))
+                    new_part = ec1.text_input("Part (숫자만 입력)", target_q.get('part', ''))
+                    new_chap = ec2.text_input("Chapter (숫자만 입력)", target_q.get('chapter', ''))
                     new_std = ec3.text_input("Standard", target_q.get('standard', ''))
                     
                     new_title = st.text_input("Title", target_q.get('question_title', ''))
@@ -141,9 +147,16 @@ def main():
                         keywords = [k.strip() for k in new_kw_str.split(',') if k.strip()]
                         model_ans = [m.strip() for m in new_ma_str.split('\n') if m.strip()]
                         
+                        # EXTRACT NUMBERS ONLY (Safety)
+                        p_match = utils.re.search(r'(\d+)', new_part)
+                        sv_part = p_match.group(1) if p_match else new_part
+                        
+                        c_match = utils.re.search(r'(\d+)', new_chap)
+                        sv_chap = c_match.group(1) if c_match else new_chap
+
                         upd_data = {
-                            "part": new_part,
-                            "chapter": new_chap,
+                            "part": sv_part,
+                            "chapter": sv_chap,
                             "standard": new_std,
                             "question_title": new_title,
                             "question_description": new_desc,

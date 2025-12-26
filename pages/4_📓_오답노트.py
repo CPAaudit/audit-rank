@@ -31,18 +31,35 @@ def main():
         return
 
     # Preprocess
+    # Load structure for mapping
+    _, _, part_code_map, chapter_map = utils.load_structure()
+
+    # Preprocess
     notes_df['part'] = notes_df['part'].fillna('Unknown')
     notes_df['chapter'] = notes_df['chapter'].fillna('Unknown')
     
-    parts = sorted(notes_df['part'].unique())
+    # Sort parts numerically if possible
+    def get_part_sort_key(p):
+        try: return int(p)
+        except: return 999
+
+    parts = sorted(notes_df['part'].unique(), key=get_part_sort_key)
     
     for part in parts:
-        with st.expander(f"📂 {part}", expanded=False):
+        # Map Part ID to Name
+        part_key = f"PART{part}"
+        part_name = part_code_map.get(part_key, f"PART{part}")
+        
+        with st.expander(f"📂 {part_name}", expanded=False):
             part_df = notes_df[notes_df['part'] == part]
             chapters = sorted(part_df['chapter'].unique(), key=utils.get_chapter_sort_key)
             
             for chap in chapters:
-                st.markdown(f"**[{chap}]**")
+                # Map Chapter ID to Name
+                chap_key = f"ch{chap}"
+                chap_name = chapter_map.get(chap_key, f"ch{chap}")
+                
+                st.markdown(f"**[{chap_name}]**")
                 chap_df = part_df[part_df['chapter'] == chap]
                 
                 for idx, row in chap_df.iterrows():
