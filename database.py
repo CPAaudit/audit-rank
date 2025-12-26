@@ -225,7 +225,7 @@ def save_review_note(username, title, user_answer, score, user_id=None):
              st.warning(f"Warning: Question ID not found for title '{title}'. Note might be saved without link.")
 
         data = {
-            "username": username,
+            # "username": username, # Removed: Column does not exist
             "user_id": user_id,
             "question_id": question_id,
             # "explanation" column renamed to "user_answer"
@@ -243,13 +243,22 @@ def save_review_note(username, title, user_answer, score, user_id=None):
 def get_user_review_notes(username, user_id=None):
     try:
         client = init_db()
+        
+        # Resolve user_id if missing
+        if not user_id and username:
+            try:
+                u_res = client.table("users").select("id").eq("username", username).execute()
+                if u_res.data:
+                    user_id = u_res.data[0]['id']
+            except: pass
+            
+        if not user_id:
+            # Cannot fetch notes without user_id
+            return pd.DataFrame()
+
         # Join with audit_questions
         query = client.table("review_notes").select("*, audit_questions(*)").order("created_at", desc=True)
-        
-        if user_id:
-             query = query.eq("user_id", user_id)
-        else:
-             query = query.eq("username", username)
+        query = query.eq("user_id", user_id)
              
         res = query.execute()
         data = res.data

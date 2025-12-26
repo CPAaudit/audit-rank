@@ -103,11 +103,11 @@ def main():
         with c1:
             st.markdown("""
             <div class="card">
-                <h3>📝 실전 훈련</h3>
+                <h3>📝 문제 풀기</h3>
                 <p>실제 시험처럼 문제를 풀고 AI 채점과 피드백을 받아보세요.</p>
             </div>
             """, unsafe_allow_html=True)
-            st.page_link("pages/1_📝_실전_훈련.py", label="훈련 시작하기", icon="🚀", use_container_width=True)
+            st.page_link("pages/1_📝_문제_풀기.py", label="문제 풀기 시작", icon="🚀", use_container_width=True)
             
         with c2:
             st.markdown("""

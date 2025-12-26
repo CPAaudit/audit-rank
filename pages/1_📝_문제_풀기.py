@@ -4,7 +4,7 @@ import database
 
 
 # [초기 설정]
-st.set_page_config(page_title="실전 훈련 | Audit Rank", page_icon="📝", layout="wide")
+st.set_page_config(page_title="문제 풀기 | Audit Rank", page_icon="📝", layout="wide")
 utils.local_css()
 
 def main():
@@ -12,7 +12,7 @@ def main():
         st.warning("로그인이 필요합니다.")
         st.stop()
 
-    st.title("📝 실전 훈련")
+    st.title("📝 문제 풀기")
     
     # DB Load (Cached in utils)
     db_data = utils.load_db()
@@ -68,7 +68,7 @@ def main():
             
         sel_diff = st.selectbox("문항 수", selectable_options)
         
-        if st.button("훈련 시작 🚀", type="primary", use_container_width=True):
+        if st.button("문제 풀기 시작 🚀", type="primary", use_container_width=True):
             cnt = diff_levels[sel_diff]
             # Pass solved_questions as exclude_titles
             quiz_list = utils.get_quiz_set(db_data, sel_part, sel_chap, sel_std, cnt, st.session_state.solved_questions)

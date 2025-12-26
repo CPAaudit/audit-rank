@@ -20,14 +20,14 @@ def main():
     
     if not is_paid_or_admin:
         st.warning("🔒 오답 노트는 '등록공인회계사' 전용 기능입니다.")
-        st.info("실전 훈련에서 저장한 오답 노트를 이곳에서 복습할 수 있습니다.")
+        st.info("문제 풀기에서 저장한 오답 노트를 이곳에서 복습할 수 있습니다.")
         return
 
     # Load Notes (Pass user_id if available)
     notes_df = database.get_user_review_notes(username, user_id=st.session_state.get('user_id'))
     
     if notes_df.empty:
-        st.info("저장된 오답 노트가 없습니다. '실전 훈련'에서 오답 노트를 저장해보세요!")
+        st.info("저장된 오답 노트가 없습니다. '문제 풀기'에서 오답 노트를 저장해보세요!")
         return
 
     # Preprocess
