@@ -43,7 +43,9 @@ def main():
             def fmt_chap(x): 
                 if x == "전체": return "전체"
                 full_name = name_map.get(x, x)
-                return f"{full_name} ({counts['chapters'].get(full_name, 0)})"
+                # Robust Lookup: Try full name first, then short code
+                c = counts['chapters'].get(full_name, counts['chapters'].get(x, 0))
+                return f"{full_name} ({c})"
             sel_chap = st.selectbox("Chapter", chap_opts, format_func=fmt_chap)
             
         with c3:
@@ -55,6 +57,12 @@ def main():
                 std_opts = ["전체"] + sorted(hierarchy[sel_part][sel_chap], key=utils.get_standard_sort_key)
             def fmt_std(x): return "전체" if x == "전체" else f"{x} ({counts['standards'].get(x, 0)})"
             sel_std = st.selectbox("Standard", std_opts, format_func=fmt_std)
+
+        # [Debug Info]
+        with st.expander("🔍 디버그 정보 (문제 수 데이터)", expanded=False):
+            st.write("Counts Keys (Chapters):", list(counts['chapters'].keys()))
+            st.write("Selected Chapter Code:", sel_chap)
+            st.write("Mapped Name:", name_map.get(sel_chap, "Not Found"))
             
         # [난이도 접근 제어]
         st.write("")
