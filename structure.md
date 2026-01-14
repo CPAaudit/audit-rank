@@ -9,8 +9,8 @@ This file documents the current structure of Parts, Chapters, and Standards used
 
 ## PART2 감사절차의 시작
 
-- **ch3 감사계획과 위험평가절차**: 300, 315
-- **ch4 위험대응과 내부통제**: 265, 330, 402, control
+- **ch3 위험평가와 내부통제 이해**: 300, 315
+- **ch4 위험대응과 통제테스트**: 265, 330, 402, control
 
 ## PART3 실증절차
 
