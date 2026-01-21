@@ -143,13 +143,13 @@ def main():
                     curr_kw = target_q.get('keywords', [])
                     if isinstance(curr_kw, list): curr_kw_str = ", ".join(curr_kw)
                     else: curr_kw_str = str(curr_kw)
-                    new_kw_str = st.text_area("Keywords", curr_kw_str)
+                    new_kw_str = st.text_input("Keywords (쉼표 구분)", curr_kw_str)
                     
                     # Model Answer List -> String
                     curr_ma = target_q.get('model_answer', [])
                     if isinstance(curr_ma, list): curr_ma_str = "\n".join(curr_ma)
                     else: curr_ma_str = str(curr_ma)
-                    new_ma_str = st.text_area("Model Answer", curr_ma_str, height=100)
+                    new_ma_str = st.text_area("Model Answer", curr_ma_str, height=250)
                     
                     new_expl = st.text_area("Explanation", target_q.get('explanation', ''), height=100)
                     
